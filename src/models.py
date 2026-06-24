@@ -9,7 +9,3 @@ class QualificationResult(BaseModel):
     book_demo_button: bool = False
     talk_to_sales_button: bool = False
     monthly_traffic: int | None = None
-    bot_detected: bool = False
-    bot_details: str | None = None
-    notes: str | None = None
-    error: str | None = None

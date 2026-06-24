@@ -9,7 +9,7 @@ from src.models import QualificationResult
 
 HEADERS = [
     "URL", "Pricing", "Sign Up", "Free Trial", "Book Demo", "Talk to Sales",
-    "Monthly Traffic", "Bot Detected", "Bot Details", "Notes", "Error",
+    "Monthly Traffic",
 ]
 
 
@@ -24,8 +24,7 @@ def _row(r: QualificationResult) -> list:
     return [
         r.url, yn(r.pricing_mentioned), yn(r.sign_up_mentioned), yn(r.free_trial_mentioned),
         yn(r.book_demo_button), yn(r.talk_to_sales_button),
-        r.monthly_traffic or "", yn(r.bot_detected),
-        r.bot_details or "", r.notes or "", r.error or "",
+        r.monthly_traffic or "",
     ]
 
 
@@ -53,6 +52,6 @@ def write_results(sheet_id: str, results: list[QualificationResult], sheet: str 
     rows = [_row(r) for r in results]
     if rows:
         sheets.values().append(
-            spreadsheetId=sheet_id, range=f"{sheet}!A:K", valueInputOption="RAW",
+            spreadsheetId=sheet_id, range=f"{sheet}!A:G", valueInputOption="RAW",
             insertDataOption="INSERT_ROWS", body={"values": rows},
         ).execute()

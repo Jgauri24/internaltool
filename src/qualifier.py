@@ -1,4 +1,4 @@
-"""Screenshot -> bot check -> Gemini -> DataForSEO traffic."""
+"""Screenshot -> Groq vision -> DataForSEO traffic."""
 
 import base64
 import json
@@ -8,28 +8,21 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
-from google import genai
-from google.genai import types
+from groq import Groq
 from playwright.sync_api import sync_playwright
 
 from src.models import QualificationResult
 
-GEMINI_PROMPT = """Analyze this SaaS website screenshot. Return JSON only:
+ANALYSIS_PROMPT = """Analyze this SaaS website screenshot. Return JSON only:
 {
   "pricing_mentioned": true/false,
   "sign_up_mentioned": true/false,
   "free_trial_mentioned": true/false,
   "book_demo_button": true/false,
-  "talk_to_sales_button": true/false,
-  "notes": "brief findings"
+  "talk_to_sales_button": true/false
 }
 
 True if visible: Pricing/plans, Sign Up/Get Started, Free Trial, Book/Schedule Demo, Talk/Contact Sales."""
-
-BOT_SIGNALS = [
-    "cf-challenge", "turnstile", "recaptcha", "hcaptcha", "datadome",
-    "verify you are human", "access denied", "unusual traffic",
-]
 
 TRAFFIC_API = "https://api.dataforseo.com/v3/dataforseo_labs/google/bulk_traffic_estimation/live"
 
@@ -52,45 +45,31 @@ def capture(url: str, output_dir: Path) -> dict:
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page(viewport={"width": 1440, "height": 900})
-        response = page.goto(url, wait_until="domcontentloaded", timeout=45000)
+        page.goto(url, wait_until="domcontentloaded", timeout=45000)
         page.wait_for_timeout(2000)
         page.screenshot(path=str(screenshot), full_page=True)
-        text = page.inner_text("body")[:12000]
-        html = page.content()[:15000]
-        title = page.title()
-        status = response.status if response else None
         browser.close()
 
-    return {
-        "url": url,
-        "screenshot": screenshot,
-        "text": text,
-        "html": html,
-        "title": title,
-        "status": status,
-    }
+    return {"url": url, "screenshot": screenshot}
 
 
-def detect_bot(page: dict) -> tuple[bool, str | None]:
-    haystack = f"{page['title']}\n{page['text']}\n{page['html']}".lower()
-    hits = [s for s in BOT_SIGNALS if s in haystack]
-    if page["status"] in {403, 429, 503}:
-        hits.append(f"http_{page['status']}")
-    if not hits:
-        return False, None
-    return True, ", ".join(hits)
+def analyze_screenshot(page: dict) -> dict:
+    client = Groq(api_key=os.environ["GROQ_API_KEY"])
+    image_b64 = base64.b64encode(Path(page["screenshot"]).read_bytes()).decode()
 
-
-def analyze_gemini(page: dict) -> dict:
-    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-    image = Path(page["screenshot"]).read_bytes()
-
-    response = client.models.generate_content(
-        model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
-        contents=[GEMINI_PROMPT, types.Part.from_bytes(data=image, mime_type="image/png")],
-        config=types.GenerateContentConfig(temperature=0.1, response_mime_type="application/json"),
+    response = client.chat.completions.create(
+        model=os.getenv("GROQ_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct"),
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": ANALYSIS_PROMPT},
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_b64}"}},
+            ],
+        }],
+        temperature=0.1,
+        response_format={"type": "json_object"},
     )
-    raw = (response.text or "").strip()
+    raw = (response.choices[0].message.content or "").strip()
     if raw.startswith("```"):
         raw = re.sub(r"^```(?:json)?|```$", "", raw, flags=re.MULTILINE).strip()
     return json.loads(raw)
@@ -133,9 +112,8 @@ def fetch_traffic(domains: list[str]) -> dict[str, int]:
 
 
 def qualify_one(page: dict, traffic: int | None) -> QualificationResult:
-    bot, bot_details = detect_bot(page)
     try:
-        g = analyze_gemini(page)
+        g = analyze_screenshot(page)
         return QualificationResult(
             url=page["url"],
             pricing_mentioned=bool(g.get("pricing_mentioned")),
@@ -144,14 +122,9 @@ def qualify_one(page: dict, traffic: int | None) -> QualificationResult:
             book_demo_button=bool(g.get("book_demo_button")),
             talk_to_sales_button=bool(g.get("talk_to_sales_button")),
             monthly_traffic=traffic,
-            bot_detected=bot,
-            bot_details=bot_details,
-            notes=g.get("notes"),
         )
-    except Exception as e:
-        return QualificationResult(
-            url=page["url"], bot_detected=bot, bot_details=bot_details, error=str(e),
-        )
+    except Exception:
+        return QualificationResult(url=page["url"])
 
 
 def qualify_urls(urls: list[str], output_dir: Path, *, skip_traffic: bool = False) -> list[QualificationResult]:

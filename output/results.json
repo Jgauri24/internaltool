@@ -2,40 +2,28 @@
   {
     "url": "https://stripe.com",
     "pricing_mentioned": false,
-    "sign_up_mentioned": false,
+    "sign_up_mentioned": true,
     "free_trial_mentioned": false,
     "book_demo_button": false,
-    "talk_to_sales_button": false,
-    "monthly_traffic": null,
-    "bot_detected": false,
-    "bot_details": null,
-    "notes": null,
-    "error": "400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key expired. Please renew the API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key expired. Please renew the API key.'}]}}"
+    "talk_to_sales_button": true,
+    "monthly_traffic": null
   },
   {
     "url": "https://notion.so",
-    "pricing_mentioned": false,
-    "sign_up_mentioned": false,
+    "pricing_mentioned": true,
+    "sign_up_mentioned": true,
     "free_trial_mentioned": false,
-    "book_demo_button": false,
+    "book_demo_button": true,
     "talk_to_sales_button": false,
-    "monthly_traffic": null,
-    "bot_detected": false,
-    "bot_details": null,
-    "notes": null,
-    "error": "400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key expired. Please renew the API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key expired. Please renew the API key.'}]}}"
+    "monthly_traffic": null
   },
   {
     "url": "https://linear.app",
     "pricing_mentioned": false,
-    "sign_up_mentioned": false,
+    "sign_up_mentioned": true,
     "free_trial_mentioned": false,
     "book_demo_button": false,
-    "talk_to_sales_button": false,
-    "monthly_traffic": null,
-    "bot_detected": false,
-    "bot_details": null,
-    "notes": null,
-    "error": "400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key expired. Please renew the API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key expired. Please renew the API key.'}]}}"
+    "talk_to_sales_button": true,
+    "monthly_traffic": null
   }
 ]
