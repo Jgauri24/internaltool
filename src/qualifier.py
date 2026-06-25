@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 import httpx
 from playwright.sync_api import sync_playwright
 
-from src.models import QualificationResult
+from src.models import QualificationResult, TrafficResult
 
 ANALYSIS_PROMPT = """You are qualifying B2B SaaS company websites for sales outreach.
 
@@ -217,7 +217,7 @@ def fetch_traffic(domains: list[str]) -> tuple[dict[str, int], str | None]:
     return out, None
 
 
-def qualify_one(page: dict, traffic: int | None) -> QualificationResult:
+def qualify_one(page: dict) -> QualificationResult:
     try:
         g = analyze_page(page)
         a11y = _detect_from_a11y(page.get("a11y_interactive", ""))
@@ -235,32 +235,32 @@ def qualify_one(page: dict, traffic: int | None) -> QualificationResult:
             free_trial_mentioned=field("free_trial_mentioned"),
             book_demo_button=field("book_demo_button"),
             talk_to_sales_button=field("talk_to_sales_button"),
-            monthly_traffic=traffic,
             bot_detected=bool(g.get("bot_detected")) if not blocked else False,
         )
     except Exception:
         return QualificationResult(url=page["url"])
 
 
-def qualify_urls(urls: list[str], *, skip_traffic: bool = False) -> list[QualificationResult]:
+def qualify_urls(urls: list[str]) -> list[QualificationResult]:
     results: list[QualificationResult] = []
-    captured_pages: list[dict] = []
 
     for u in urls:
         url = normalize_url(u)
         try:
-            captured_pages.append(capture(url))
+            page = capture(url)
+            results.append(qualify_one(page))
         except Exception:
             results.append(QualificationResult(url=url))
 
-    traffic_map: dict[str, int] = {}
-    if not skip_traffic and captured_pages:
-        traffic_map, traffic_error = fetch_traffic([domain_from_url(p["url"]) for p in captured_pages])
-        if traffic_error:
-            print(f"Traffic lookup failed: {traffic_error}", file=sys.stderr)
-
-    for page in captured_pages:
-        domain = domain_from_url(page["url"])
-        results.append(qualify_one(page, traffic_map.get(domain)))
-
     return results
+
+
+def fetch_traffic_for_urls(urls: list[str]) -> list[TrafficResult]:
+    urls = [normalize_url(u) for u in urls]
+    traffic_map, traffic_error = fetch_traffic([domain_from_url(u) for u in urls])
+    if traffic_error:
+        print(f"Traffic lookup failed: {traffic_error}", file=sys.stderr)
+    return [
+        TrafficResult(url=url, monthly_traffic=traffic_map.get(domain_from_url(url)))
+        for url in urls
+    ]

@@ -8,5 +8,9 @@ class QualificationResult(BaseModel):
     free_trial_mentioned: bool = False
     book_demo_button: bool = False
     talk_to_sales_button: bool = False
-    monthly_traffic: int | None = None
     bot_detected: bool = False
+
+
+class TrafficResult(BaseModel):
+    url: str
+    monthly_traffic: int | None = None
