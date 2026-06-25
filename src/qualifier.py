@@ -14,7 +14,7 @@ from src.models import QualificationResult
 
 ANALYSIS_PROMPT = """You are qualifying B2B SaaS company websites for sales outreach.
 
-Analyze the screenshot and return JSON only:
+Use BOTH the screenshot and the page text provided. Return JSON only:
 {
   "pricing_mentioned": true/false,
   "sign_up_mentioned": true/false,
@@ -24,15 +24,20 @@ Analyze the screenshot and return JSON only:
   "bot_detected": true/false
 }
 
-Criteria:
-- pricing_mentioned: Pricing link, plans/tiers, or dollar amounts visible
-- sign_up_mentioned: Sign Up, Get Started, Create Account, or Register CTA visible
-- free_trial_mentioned: Start Free Trial, Try Free, or Free Trial offer visible
-- book_demo_button: Book Demo, Schedule Demo, or Request Demo CTA visible
-- talk_to_sales_button: Talk to Sales, Contact Sales, or Speak to Sales CTA visible
-- bot_detected: true ONLY if the page shows bot protection (CAPTCHA, Cloudflare check, "verify you are human", access denied, blank page) instead of the real website. false if the actual site loaded.
+Criteria (must be clearly present in screenshot OR page text):
+- pricing_mentioned: Pricing link, plans/tiers, or dollar amounts
+- sign_up_mentioned: Sign Up, Get Started, Create Account, or Register
+- free_trial_mentioned: Start Free Trial, Try Free, or Free Trial
+- book_demo_button: Book Demo, Schedule Demo, or Request Demo
+- talk_to_sales_button: Talk to Sales, Contact Sales, or Speak to Sales
+- bot_detected: true ONLY if a live chat widget or chat bubble is visibly present (Intercom, Drift, HubSpot messenger, Zendesk chat, "Chat with us" bubble in corner). false for cookie banners, privacy notices, CAPTCHA pages, and pages with no chat widget. Do NOT guess.
 
-If bot_detected is true, set all other fields to false."""
+If the page is a CAPTCHA/block screen (not the real site), set all fields to false."""
+
+BLOCK_PATTERNS = [
+    "cf-challenge", "turnstile", "recaptcha", "hcaptcha", "datadome",
+    "verify you are human", "access denied", "unusual traffic",
+]
 
 TRAFFIC_API = "https://api.dataforseo.com/v3/dataforseo_labs/google/bulk_traffic_estimation/live"
 
@@ -55,12 +60,41 @@ def capture(url: str, output_dir: Path) -> dict:
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page(viewport={"width": 1440, "height": 900})
-        page.goto(url, wait_until="domcontentloaded", timeout=45000)
-        page.wait_for_timeout(2000)
+        response = page.goto(url, wait_until="domcontentloaded", timeout=45000)
+        page.wait_for_timeout(3000)
         page.screenshot(path=str(screenshot), full_page=True)
+        text = page.inner_text("body")[:12000]
+        html = page.content()[:30000].lower()
+        title = page.title()
+        final_url = page.url
+        status = response.status if response else None
         browser.close()
 
-    return {"url": url, "screenshot": screenshot}
+    return {
+        "url": url,
+        "final_url": final_url,
+        "screenshot": screenshot,
+        "text": text,
+        "html": html,
+        "title": title,
+        "status": status,
+    }
+
+
+def is_blocked(page: dict) -> bool:
+    haystack = f"{page.get('text', '')}\n{page.get('html', '')}".lower()
+    if any(p in haystack for p in BLOCK_PATTERNS):
+        return True
+    return page.get("status") in {403, 429, 503}
+
+
+def _page_context(page: dict) -> str:
+    return (
+        f"URL: {page['url']}\n"
+        f"Final URL: {page.get('final_url', page['url'])}\n"
+        f"Title: {page.get('title', '')}\n\n"
+        f"Page text:\n{page.get('text', '')[:6000]}"
+    )
 
 
 def _parse_json(raw: str) -> dict:
@@ -78,7 +112,11 @@ def _analyze_gemini(page: dict) -> dict:
     image = Path(page["screenshot"]).read_bytes()
     response = client.models.generate_content(
         model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
-        contents=[ANALYSIS_PROMPT, types.Part.from_bytes(data=image, mime_type="image/png")],
+        contents=[
+            ANALYSIS_PROMPT,
+            _page_context(page),
+            types.Part.from_bytes(data=image, mime_type="image/png"),
+        ],
         config=types.GenerateContentConfig(temperature=0.1, response_mime_type="application/json"),
     )
     return _parse_json(response.text or "")
@@ -94,7 +132,7 @@ def _analyze_groq(page: dict) -> dict:
         messages=[{
             "role": "user",
             "content": [
-                {"type": "text", "text": ANALYSIS_PROMPT},
+                {"type": "text", "text": f"{ANALYSIS_PROMPT}\n\n{_page_context(page)}"},
                 {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_b64}"}},
             ],
         }],
@@ -147,32 +185,41 @@ def fetch_traffic(domains: list[str]) -> dict[str, int]:
 def qualify_one(page: dict, traffic: int | None) -> QualificationResult:
     try:
         g = analyze_screenshot(page)
-        bot = bool(g.get("bot_detected"))
+        blocked = is_blocked(page)
         return QualificationResult(
             url=page["url"],
-            pricing_mentioned=False if bot else bool(g.get("pricing_mentioned")),
-            sign_up_mentioned=False if bot else bool(g.get("sign_up_mentioned")),
-            free_trial_mentioned=False if bot else bool(g.get("free_trial_mentioned")),
-            book_demo_button=False if bot else bool(g.get("book_demo_button")),
-            talk_to_sales_button=False if bot else bool(g.get("talk_to_sales_button")),
+            pricing_mentioned=False if blocked else bool(g.get("pricing_mentioned")),
+            sign_up_mentioned=False if blocked else bool(g.get("sign_up_mentioned")),
+            free_trial_mentioned=False if blocked else bool(g.get("free_trial_mentioned")),
+            book_demo_button=False if blocked else bool(g.get("book_demo_button")),
+            talk_to_sales_button=False if blocked else bool(g.get("talk_to_sales_button")),
             monthly_traffic=traffic,
-            bot_detected=bot,
+            bot_detected=bool(g.get("bot_detected")),
         )
     except Exception:
         return QualificationResult(url=page["url"])
 
 
 def qualify_urls(urls: list[str], output_dir: Path, *, skip_traffic: bool = False) -> list[QualificationResult]:
-    pages = [capture(normalize_url(u), output_dir) for u in urls]
+    results: list[QualificationResult] = []
+    captured_pages: list[dict] = []
+
+    for u in urls:
+        url = normalize_url(u)
+        try:
+            page = capture(url, output_dir)
+            captured_pages.append(page)
+        except Exception:
+            results.append(QualificationResult(url=url))
 
     traffic_map: dict[str, int] = {}
-    if not skip_traffic:
+    if not skip_traffic and captured_pages:
         try:
-            traffic_map = fetch_traffic([domain_from_url(p["url"]) for p in pages])
+            traffic_map = fetch_traffic([domain_from_url(p["url"]) for p in captured_pages])
         except Exception:
             pass
 
-    return [
-        qualify_one(page, traffic_map.get(domain_from_url(page["url"])))
-        for page in pages
-    ]
+    for page in captured_pages:
+        results.append(qualify_one(page, traffic_map.get(domain_from_url(page["url"]))))
+
+    return results

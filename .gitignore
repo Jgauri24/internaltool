@@ -4,5 +4,8 @@ node_modules/
 __pycache__/
 *.pyc
 credentials/
-output/screenshots/
+output/
 .DS_Store
+icp_urls.txt
+crm_urls.txt
+batch_*.txt
