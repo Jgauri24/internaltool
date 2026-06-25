@@ -40,8 +40,38 @@ def _row(r: QualificationResult) -> list:
     ]
 
 
-def read_urls(sheet_id: str, range_name: str = "Input!A:A") -> list[str]:
-    values = _service().spreadsheets().values().get(spreadsheetId=sheet_id, range=range_name).execute().get("values", [])
+def _sheet_titles(sheet_id: str) -> set[str]:
+    svc = _service()
+    meta = svc.spreadsheets().get(spreadsheetId=sheet_id).execute()
+    return {s["properties"]["title"] for s in meta.get("sheets", [])}
+
+
+def _ensure_sheet(sheet_id: str, title: str, header: list[str] | None = None) -> None:
+    svc = _service()
+    sheets = svc.spreadsheets()
+    if title in _sheet_titles(sheet_id):
+        return
+    sheets.batchUpdate(
+        spreadsheetId=sheet_id,
+        body={"requests": [{"addSheet": {"properties": {"title": title}}}]},
+    ).execute()
+    if header:
+        sheets.values().update(
+            spreadsheetId=sheet_id,
+            range=f"{title}!A1",
+            valueInputOption="RAW",
+            body={"values": [header]},
+        ).execute()
+
+
+def read_urls(sheet_id: str, sheet: str = "Input") -> list[str]:
+    _ensure_sheet(sheet_id, sheet, header=["URL"])
+    values = (
+        _service().spreadsheets().values()
+        .get(spreadsheetId=sheet_id, range=f"{sheet}!A:A")
+        .execute()
+        .get("values", [])
+    )
     skip = {"url", "website", "domain"}
     return [row[0].strip() for row in values if row and row[0].strip().lower() not in skip]
 
@@ -70,12 +100,8 @@ def clear_results(sheet_id: str, sheet: str = "Qualification") -> None:
     """Clear all rows, keep headers only."""
     svc = _service()
     sheets = svc.spreadsheets()
-    titles = {s["properties"]["title"] for s in sheets.get(spreadsheetId=sheet_id).execute().get("sheets", [])}
-    if sheet not in titles:
-        sheets.batchUpdate(
-            spreadsheetId=sheet_id,
-            body={"requests": [{"addSheet": {"properties": {"title": sheet}}}]},
-        ).execute()
+    if sheet not in _sheet_titles(sheet_id):
+        _ensure_sheet(sheet_id, sheet)
     sheets.values().clear(spreadsheetId=sheet_id, range=f"{sheet}!A:H").execute()
     sheets.values().update(
         spreadsheetId=sheet_id,

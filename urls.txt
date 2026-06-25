@@ -1,0 +1,2 @@
+# Fallback only — add URLs to the Google Sheet "Input" tab (column A) instead.
+# One URL per line. Lines starting with # are ignored.
