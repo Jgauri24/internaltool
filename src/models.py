@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel  # pyright: ignore[reportMissingImports]
 
 
 class QualificationResult(BaseModel):

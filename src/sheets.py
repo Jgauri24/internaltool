@@ -3,8 +3,8 @@
 import os
 from urllib.parse import urlparse
 
-from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
+from google.oauth2.service_account import Credentials  # pyright: ignore[reportMissingImports]
+from googleapiclient.discovery import build  # pyright: ignore[reportMissingImports]
 
 from src.models import QualificationResult
 

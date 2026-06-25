@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # pyright: ignore[reportMissingImports]
 
 from src.qualifier import qualify_urls
 from src.sheets import clear_results, existing_url_keys, read_urls, upsert_results, url_key, write_results
