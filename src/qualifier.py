@@ -5,6 +5,8 @@ import json
 import os
 import re
 import sys
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -12,6 +14,10 @@ import httpx
 from playwright.sync_api import sync_playwright
 
 from src.models import QualificationResult
+from src.token_log import log_token_usage, usage_from_gemini
+
+MIN_WORKERS = 1
+MAX_WORKERS = 10
 
 ANALYSIS_PROMPT = """You are qualifying B2B SaaS company websites for sales outreach.
 
@@ -160,17 +166,40 @@ def _analyze_gemini(page: dict) -> dict:
     from google import genai
     from google.genai import types
 
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-    response = client.models.generate_content(
-        model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
-        contents=[
-            ANALYSIS_PROMPT,
-            _page_context(page),
-            types.Part.from_bytes(data=page["screenshot_bytes"], mime_type="image/png"),
-        ],
-        config=types.GenerateContentConfig(temperature=0.1, response_mime_type="application/json"),
-    )
-    return _parse_json(response.text or "")
+    started = time.perf_counter()
+    try:
+        response = client.models.generate_content(
+            model=model,
+            contents=[
+                ANALYSIS_PROMPT,
+                _page_context(page),
+                types.Part.from_bytes(data=page["screenshot_bytes"], mime_type="image/png"),
+            ],
+            config=types.GenerateContentConfig(temperature=0.1, response_mime_type="application/json"),
+        )
+        inp, out, total, cached = usage_from_gemini(response)
+        log_token_usage(
+            url=page["url"],
+            model=model,
+            input_tokens=inp,
+            output_tokens=out,
+            total_tokens=total,
+            cached_tokens=cached,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            status="success",
+        )
+        return _parse_json(response.text or "")
+    except Exception as exc:
+        log_token_usage(
+            url=page["url"],
+            model=model,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            status="error",
+            error=str(exc),
+        )
+        raise
 
 
 def analyze_page(page: dict) -> dict:
@@ -242,25 +271,54 @@ def qualify_one(page: dict, traffic: int | None) -> QualificationResult:
         return QualificationResult(url=page["url"])
 
 
-def qualify_urls(urls: list[str], *, skip_traffic: bool = False) -> list[QualificationResult]:
-    results: list[QualificationResult] = []
-    captured_pages: list[dict] = []
+def resolve_workers(workers: int | None = None) -> int:
+    """Clamp worker count between MIN_WORKERS/MAX_WORKERS (overridable via env)."""
+    min_w = int(os.getenv("MIN_WORKERS", MIN_WORKERS))
+    max_w = int(os.getenv("MAX_WORKERS", MAX_WORKERS))
+    if min_w < 1:
+        min_w = 1
+    if max_w < min_w:
+        max_w = min_w
+    default = int(os.getenv("WORKERS", min_w))
+    chosen = workers if workers is not None else default
+    return max(min_w, min(chosen, max_w))
 
-    for u in urls:
-        url = normalize_url(u)
-        try:
-            captured_pages.append(capture(url))
-        except Exception:
-            results.append(QualificationResult(url=url))
+
+def _process_url(url: str, traffic: int | None) -> QualificationResult:
+    url = normalize_url(url)
+    try:
+        page = capture(url)
+        return qualify_one(page, traffic)
+    except Exception:
+        return QualificationResult(url=url)
+
+
+def qualify_urls(
+    urls: list[str],
+    *,
+    skip_traffic: bool = False,
+    workers: int | None = None,
+) -> list[QualificationResult]:
+    urls = [normalize_url(u) for u in urls]
+    worker_count = resolve_workers(workers)
 
     traffic_map: dict[str, int] = {}
-    if not skip_traffic and captured_pages:
-        traffic_map, traffic_error = fetch_traffic([domain_from_url(p["url"]) for p in captured_pages])
+    if not skip_traffic:
+        traffic_map, traffic_error = fetch_traffic([domain_from_url(u) for u in urls])
         if traffic_error:
             print(f"Traffic lookup failed: {traffic_error}", file=sys.stderr)
 
-    for page in captured_pages:
-        domain = domain_from_url(page["url"])
-        results.append(qualify_one(page, traffic_map.get(domain)))
+    if worker_count <= 1:
+        return [_process_url(u, traffic_map.get(domain_from_url(u))) for u in urls]
 
-    return results
+    print(f"Using {worker_count} parallel workers", file=sys.stderr)
+    results: list[QualificationResult | None] = [None] * len(urls)
+    with ThreadPoolExecutor(max_workers=worker_count) as pool:
+        futures = {
+            pool.submit(_process_url, url, traffic_map.get(domain_from_url(url))): i
+            for i, url in enumerate(urls)
+        }
+        for future in as_completed(futures):
+            results[futures[future]] = future.result()
+
+    return [r if r is not None else QualificationResult(url=urls[i]) for i, r in enumerate(results)]

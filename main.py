@@ -35,6 +35,12 @@ def main():
     p.add_argument("--sheet-id", default=os.getenv("GOOGLE_SHEET_ID"), help="Google Sheet ID (or set GOOGLE_SHEET_ID in .env)")
     p.add_argument("--read-urls-from-sheet", action="store_true", help="Deprecated — sheet Input tab is used by default when GOOGLE_SHEET_ID is set")
     p.add_argument("--skip-traffic", action="store_true")
+    p.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help="Parallel URL workers (clamped to MIN_WORKERS–MAX_WORKERS from env, default 1)",
+    )
     p.add_argument("--force", action="store_true", help="Re-run URLs already in sheet and update their row")
     p.add_argument("--clear-sheet", action="store_true", help="Clear Qualification tab before writing")
     args = p.parse_args()
@@ -79,7 +85,7 @@ def main():
             sys.exit(0)
 
     print(f"Qualifying {len(urls)} URL(s)...", file=sys.stderr)
-    results = qualify_urls(urls, skip_traffic=args.skip_traffic)
+    results = qualify_urls(urls, skip_traffic=args.skip_traffic, workers=args.workers)
 
     for r in results:
         print(json.dumps(r.model_dump(), indent=2))
