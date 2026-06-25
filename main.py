@@ -69,10 +69,15 @@ def main():
     run_qualify = not args.traffic_only
     run_traffic = not args.qualify_only
 
-    qual_urls: list[str] = list(args.urls)
+    qual_urls: list[str] = []
     traffic_urls: list[str] = []
 
-    if args.file:
+    if args.urls:
+        if run_qualify:
+            qual_urls = list(args.urls)
+        if run_traffic:
+            traffic_urls = list(args.urls)
+    elif args.file:
         qual_urls += load_urls_from_file(args.file)
         print(f"Reading qualification URLs from {args.file}", file=sys.stderr)
     elif args.sheet_id and not args.urls:
