@@ -1,29 +1,82 @@
 [
   {
-    "url": "https://stripe.com",
+    "url": "https://www.salesforce.com",
     "pricing_mentioned": false,
-    "sign_up_mentioned": true,
+    "sign_up_mentioned": false,
     "free_trial_mentioned": false,
     "book_demo_button": false,
-    "talk_to_sales_button": true,
-    "monthly_traffic": null
+    "talk_to_sales_button": false,
+    "monthly_traffic": null,
+    "bot_detected": true
   },
   {
-    "url": "https://notion.so",
-    "pricing_mentioned": true,
+    "url": "https://www.hubspot.com",
+    "pricing_mentioned": false,
     "sign_up_mentioned": true,
-    "free_trial_mentioned": false,
+    "free_trial_mentioned": true,
     "book_demo_button": true,
     "talk_to_sales_button": false,
-    "monthly_traffic": null
+    "monthly_traffic": null,
+    "bot_detected": false
   },
   {
-    "url": "https://linear.app",
-    "pricing_mentioned": false,
+    "url": "https://www.pipedrive.com",
+    "pricing_mentioned": true,
     "sign_up_mentioned": true,
-    "free_trial_mentioned": false,
+    "free_trial_mentioned": true,
+    "book_demo_button": true,
+    "talk_to_sales_button": true,
+    "monthly_traffic": null,
+    "bot_detected": false
+  },
+  {
+    "url": "https://www.zoho.com/crm",
+    "pricing_mentioned": true,
+    "sign_up_mentioned": true,
+    "free_trial_mentioned": true,
+    "book_demo_button": true,
+    "talk_to_sales_button": true,
+    "monthly_traffic": null,
+    "bot_detected": false
+  },
+  {
+    "url": "https://www.freshworks.com/crm",
+    "pricing_mentioned": true,
+    "sign_up_mentioned": true,
+    "free_trial_mentioned": true,
+    "book_demo_button": true,
+    "talk_to_sales_button": true,
+    "monthly_traffic": null,
+    "bot_detected": false
+  },
+  {
+    "url": "https://monday.com/crm",
+    "pricing_mentioned": true,
+    "sign_up_mentioned": true,
+    "free_trial_mentioned": true,
     "book_demo_button": false,
     "talk_to_sales_button": true,
-    "monthly_traffic": null
+    "monthly_traffic": null,
+    "bot_detected": false
+  },
+  {
+    "url": "https://www.copper.com",
+    "pricing_mentioned": true,
+    "sign_up_mentioned": true,
+    "free_trial_mentioned": true,
+    "book_demo_button": true,
+    "talk_to_sales_button": false,
+    "monthly_traffic": null,
+    "bot_detected": false
+  },
+  {
+    "url": "https://www.close.com",
+    "pricing_mentioned": true,
+    "sign_up_mentioned": false,
+    "free_trial_mentioned": true,
+    "book_demo_button": false,
+    "talk_to_sales_button": false,
+    "monthly_traffic": null,
+    "bot_detected": false
   }
 ]

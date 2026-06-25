@@ -9,7 +9,7 @@ from src.models import QualificationResult
 
 HEADERS = [
     "URL", "Pricing", "Sign Up", "Free Trial", "Book Demo", "Talk to Sales",
-    "Monthly Traffic",
+    "Monthly Traffic", "Bot Detected",
 ]
 
 
@@ -24,7 +24,7 @@ def _row(r: QualificationResult) -> list:
     return [
         r.url, yn(r.pricing_mentioned), yn(r.sign_up_mentioned), yn(r.free_trial_mentioned),
         yn(r.book_demo_button), yn(r.talk_to_sales_button),
-        r.monthly_traffic or "",
+        r.monthly_traffic or "", yn(r.bot_detected),
     ]
 
 
@@ -35,6 +35,7 @@ def read_urls(sheet_id: str, range_name: str = "Input!A:A") -> list[str]:
 
 
 def write_results(sheet_id: str, results: list[QualificationResult], sheet: str = "Qualification") -> None:
+    """Replace sheet with only this run's results."""
     svc = _service()
     sheets = svc.spreadsheets()
 
@@ -45,13 +46,11 @@ def write_results(sheet_id: str, results: list[QualificationResult], sheet: str 
             body={"requests": [{"addSheet": {"properties": {"title": sheet}}}]},
         ).execute()
 
-    sheets.values().update(
-        spreadsheetId=sheet_id, range=f"{sheet}!A1", valueInputOption="RAW", body={"values": [HEADERS]},
-    ).execute()
-
     rows = [_row(r) for r in results]
-    if rows:
-        sheets.values().append(
-            spreadsheetId=sheet_id, range=f"{sheet}!A:G", valueInputOption="RAW",
-            insertDataOption="INSERT_ROWS", body={"values": rows},
-        ).execute()
+    sheets.values().clear(spreadsheetId=sheet_id, range=f"{sheet}!A:H").execute()
+    sheets.values().update(
+        spreadsheetId=sheet_id,
+        range=f"{sheet}!A1",
+        valueInputOption="RAW",
+        body={"values": [HEADERS] + rows},
+    ).execute()
